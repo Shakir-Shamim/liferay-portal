@@ -797,3 +797,23 @@ The name field was populated with the fieldReference rather than the field's nam
 
 Consumers that relied on the name field to obtain the fieldReference should read the fieldReference field of ContentField instead.
 ```
+
+----
+
+# 7cd5fb381b90d943eb24da5c9d5683791394cc20
+
+This commit should not be reported as a breaking change. The correct message is:
+
+```
+LPD-102355 Enforce DOWNLOAD permission on /c/document_library/get_file
+
+# breaking
+
+## What ./readme/BREAKING_CHANGES_AMENDMENTS.md
+
+The message is not correct.
+
+## Why
+
+This commit should not be reported as a breaking change. The correct message is: LPD-102355 Enforce DOWNLOAD permission on /c/document_library/get_file
+```
