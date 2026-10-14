@@ -24,6 +24,7 @@ import com.liferay.portal.kernel.log.LogFactoryUtil;
 import com.liferay.portal.kernel.model.BaseModelListener;
 import com.liferay.portal.kernel.model.ModelListener;
 import com.liferay.portal.kernel.repository.model.FileVersion;
+import com.liferay.portal.kernel.transaction.TransactionCallbackUtil;
 
 import java.util.Objects;
 
@@ -43,29 +44,21 @@ public class DLFileVersionModelListener
 	public void onAfterRemove(DLFileVersion dlFileVersion)
 		throws ModelListenerException {
 
-		try {
-			DLFileEntry dlFileEntry = _dlFileEntryLocalService.fetchDLFileEntry(
-				dlFileVersion.getFileEntryId());
+		DLFileEntry dlFileEntry = _dlFileEntryLocalService.fetchDLFileEntry(
+			dlFileVersion.getFileEntryId());
 
-			if (dlFileEntry != null) {
-				DLStoreUtil.deleteFile(
-					dlFileEntry.getCompanyId(),
-					dlFileEntry.getDataRepositoryId(), dlFileEntry.getName(),
-					dlFileVersion.getStoreFileName());
-			}
-
-			DLFileVersionPreview dlFileVersionPreview =
-				_dlFileVersionPreviewLocalService.fetchDLFileVersionPreview(
-					dlFileVersion.getFileEntryId(),
-					dlFileVersion.getFileVersionId());
-
-			if (dlFileVersionPreview != null) {
-				_dlFileVersionPreviewLocalService.deleteDLFileVersionPreview(
-					dlFileVersionPreview);
-			}
+		if (dlFileEntry != null) {
+			_deleteFile(dlFileEntry, dlFileVersion.getStoreFileName());
 		}
-		catch (PortalException portalException) {
-			_log.error(portalException);
+
+		DLFileVersionPreview dlFileVersionPreview =
+			_dlFileVersionPreviewLocalService.fetchDLFileVersionPreview(
+				dlFileVersion.getFileEntryId(),
+				dlFileVersion.getFileVersionId());
+
+		if (dlFileVersionPreview != null) {
+			_dlFileVersionPreviewLocalService.deleteDLFileVersionPreview(
+				dlFileVersionPreview);
 		}
 	}
 
@@ -83,14 +76,9 @@ public class DLFileVersionModelListener
 			try {
 				DLFileEntry fileEntry = originalModel.getFileEntry();
 
-				DLStoreUtil.deleteFile(
-					originalModel.getCompanyId(),
-					originalModel.getRepositoryId(), fileEntry.getName(),
-					originalModel.getStoreFileName());
-				DLStoreUtil.deleteFile(
-					originalModel.getCompanyId(),
-					originalModel.getRepositoryId(), fileEntry.getName(),
-					originalModel.getStoreFileName() + ".index");
+				_deleteFile(fileEntry, originalModel.getStoreFileName());
+				_deleteFile(
+					fileEntry, originalModel.getStoreFileName() + ".index");
 			}
 			catch (PortalException portalException) {
 				_log.error(portalException);
@@ -147,6 +135,20 @@ public class DLFileVersionModelListener
 				dlProcessor.cleanUp(fileVersion);
 			}
 		}
+	}
+
+	private void _deleteFile(DLFileEntry dlFileEntry, String storeFileName) {
+		long companyId = dlFileEntry.getCompanyId();
+		long dataRepositoryId = dlFileEntry.getDataRepositoryId();
+		String name = dlFileEntry.getName();
+
+		TransactionCallbackUtil.registerCommitCallback(
+			() -> {
+				DLStoreUtil.deleteFile(
+					companyId, dataRepositoryId, name, storeFileName);
+
+				return null;
+			});
 	}
 
 	private static final Log _log = LogFactoryUtil.getLog(
