@@ -520,7 +520,9 @@ public class DLFileEntryLocalServiceImpl
 			DLStoreUtil.copyFileVersion(
 				dlStoreRequest, latestDLFileVersion.getStoreFileName());
 
-			_registerPWCDeletionCallback(dlFileEntry, oldStoreFileName);
+			_deleteFile(
+				dlFileEntry.getCompanyId(), dlFileEntry.getDataRepositoryId(),
+				dlFileEntry.getName(), oldStoreFileName);
 		}
 		catch (NoSuchFileException noSuchFileException) {
 			if (_log.isDebugEnabled()) {
@@ -535,7 +537,9 @@ public class DLFileEntryLocalServiceImpl
 				dlFileEntry.getName(), oldVersion,
 				latestDLFileVersion.getStoreFileName());
 
-			_registerPWCDeletionCallback(dlFileEntry, oldVersion);
+			_deleteFile(
+				dlFileEntry.getCompanyId(), dlFileEntry.getDataRepositoryId(),
+				dlFileEntry.getName(), oldVersion);
 		}
 
 		unlockFileEntry(fileEntryId);
@@ -2828,13 +2832,17 @@ public class DLFileEntryLocalServiceImpl
 	}
 
 	private void _deleteFile(
-			long companyId, long repositoryId, String name,
-			String storeFileName)
-		throws PortalException {
+		long companyId, long repositoryId, String name, String storeFileName) {
 
-		DLStoreUtil.deleteFile(companyId, repositoryId, name, storeFileName);
-		DLStoreUtil.deleteFile(
-			companyId, repositoryId, name, storeFileName + ".index");
+		TransactionCallbackUtil.registerCommitCallback(
+			() -> {
+				DLStoreUtil.deleteFile(
+					companyId, repositoryId, name, storeFileName);
+				DLStoreUtil.deleteFile(
+					companyId, repositoryId, name, storeFileName + ".index");
+
+				return null;
+			});
 	}
 
 	private void _expireFileVersion(
@@ -3734,20 +3742,6 @@ public class DLFileEntryLocalServiceImpl
 					workflowContext);
 			}
 		}
-	}
-
-	private void _registerPWCDeletionCallback(
-		DLFileEntry dlFileEntry, String storeFileName) {
-
-		TransactionCallbackUtil.registerCommitCallback(
-			() -> {
-				_deleteFile(
-					dlFileEntry.getCompanyId(),
-					dlFileEntry.getDataRepositoryId(), dlFileEntry.getName(),
-					storeFileName);
-
-				return null;
-			});
 	}
 
 	private void _reindex(DLFileEntry dlFileEntry) throws SearchException {
