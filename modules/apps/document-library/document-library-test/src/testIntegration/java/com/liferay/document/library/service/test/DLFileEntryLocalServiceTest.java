@@ -115,6 +115,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -596,6 +597,40 @@ public class DLFileEntryLocalServiceTest {
 	}
 
 	@Test
+	public void testAddFileEntryWithRollback() throws Exception {
+		AtomicReference<DLFileEntry> dlFileEntryReference =
+			new AtomicReference<>();
+		AtomicReference<DLFileVersion> dlFileVersionReference =
+			new AtomicReference<>();
+
+		Assert.assertThrows(
+			PortalException.class,
+			() -> TransactionInvokerUtil.invoke(
+				_transactionConfig,
+				() -> {
+					FileEntry fileEntry = DLAppTestUtil.addFileEntry(
+						_group.getGroupId());
+
+					dlFileEntryReference.set((DLFileEntry)fileEntry.getModel());
+
+					FileVersion fileVersion = fileEntry.getFileVersion();
+
+					dlFileVersionReference.set(
+						(DLFileVersion)fileVersion.getModel());
+
+					throw new PortalException();
+				}));
+
+		DLFileEntry dlFileEntry = dlFileEntryReference.get();
+		DLFileVersion dlFileVersion = dlFileVersionReference.get();
+
+		Assert.assertFalse(
+			DLStoreUtil.hasFile(
+				dlFileEntry.getCompanyId(), dlFileEntry.getDataRepositoryId(),
+				dlFileEntry.getName(), dlFileVersion.getStoreFileName()));
+	}
+
+	@Test
 	public void testAddFileEntryWithoutExternalReferenceCode()
 		throws Exception {
 
@@ -868,6 +903,39 @@ public class DLFileEntryLocalServiceTest {
 		Assert.assertTrue(
 			DLStoreUtil.hasFile(
 				dlFileVersion.getCompanyId(), dlFileEntry.getDataRepositoryId(),
+				dlFileEntry.getName(), dlFileVersion.getStoreFileName()));
+	}
+
+	@Test
+	public void testCheckOutFileEntryWithRollback() throws Exception {
+		FileEntry fileEntry = DLAppTestUtil.addFileEntry(_group.getGroupId());
+
+		DLFileEntryLocalServiceUtil.checkOutFileEntry(
+			TestPropsValues.getUserId(), fileEntry.getFileEntryId(),
+			ServiceContextTestUtil.getServiceContext(_group.getGroupId()));
+
+		DLFileVersion dlFileVersion =
+			DLFileVersionLocalServiceUtil.getLatestFileVersion(
+				fileEntry.getFileEntryId(), false);
+
+		Assert.assertThrows(
+			PortalException.class,
+			() -> TransactionInvokerUtil.invoke(
+				_transactionConfig,
+				() -> {
+					DLFileEntryLocalServiceUtil.checkOutFileEntry(
+						TestPropsValues.getUserId(), fileEntry.getFileEntryId(),
+						ServiceContextTestUtil.getServiceContext(
+							_group.getGroupId()));
+
+					throw new PortalException();
+				}));
+
+		DLFileEntry dlFileEntry = (DLFileEntry)fileEntry.getModel();
+
+		Assert.assertTrue(
+			DLStoreUtil.hasFile(
+				dlFileEntry.getCompanyId(), dlFileEntry.getDataRepositoryId(),
 				dlFileEntry.getName(), dlFileVersion.getStoreFileName()));
 	}
 
@@ -2241,19 +2309,29 @@ public class DLFileEntryLocalServiceTest {
 
 		byte[] bytes = FileUtil.getBytes(fileEntry.getContentStream());
 
+		AtomicReference<DLFileVersion> dlFileVersionReference =
+			new AtomicReference<>();
+
 		Assert.assertThrows(
 			PortalException.class,
 			() -> TransactionInvokerUtil.invoke(
 				_transactionConfig,
 				() -> {
-					DLAppLocalServiceUtil.updateFileEntry(
-						TestPropsValues.getUserId(), fileEntry.getFileEntryId(),
-						fileEntry.getFileName(), ContentTypes.TEXT_PLAIN,
-						fileEntry.getTitle(), null, StringPool.BLANK,
-						StringPool.BLANK, DLVersionNumberIncrease.NONE,
-						RandomTestUtil.randomBytes(), null, null, null,
-						ServiceContextTestUtil.getServiceContext(
-							_group.getGroupId()));
+					FileEntry updatedFileEntry =
+						DLAppLocalServiceUtil.updateFileEntry(
+							TestPropsValues.getUserId(),
+							fileEntry.getFileEntryId(), fileEntry.getFileName(),
+							ContentTypes.TEXT_PLAIN, fileEntry.getTitle(), null,
+							StringPool.BLANK, StringPool.BLANK,
+							DLVersionNumberIncrease.NONE,
+							RandomTestUtil.randomBytes(), null, null, null,
+							ServiceContextTestUtil.getServiceContext(
+								_group.getGroupId()));
+
+					FileVersion fileVersion = updatedFileEntry.getFileVersion();
+
+					dlFileVersionReference.set(
+						(DLFileVersion)fileVersion.getModel());
 
 					throw new PortalException();
 				}));
@@ -2263,6 +2341,15 @@ public class DLFileEntryLocalServiceTest {
 
 		Assert.assertArrayEquals(
 			bytes, FileUtil.getBytes(rolledBackFileEntry.getContentStream()));
+
+		DLFileEntry dlFileEntry = (DLFileEntry)rolledBackFileEntry.getModel();
+
+		DLFileVersion dlFileVersion = dlFileVersionReference.get();
+
+		Assert.assertFalse(
+			DLStoreUtil.hasFile(
+				dlFileEntry.getCompanyId(), dlFileEntry.getDataRepositoryId(),
+				dlFileEntry.getName(), dlFileVersion.getStoreFileName()));
 	}
 
 	@Test(expected = DuplicateFolderNameException.class)
