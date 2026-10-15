@@ -875,16 +875,9 @@ public class DLFileEntryLocalServiceImpl
 
 		// File
 
-		try {
-			DLStoreUtil.deleteFile(
-				dlFileEntry.getCompanyId(), dlFileEntry.getDataRepositoryId(),
-				dlFileEntry.getName());
-		}
-		catch (Exception exception) {
-			if (_log.isWarnEnabled()) {
-				_log.warn(exception);
-			}
-		}
+		_deleteFile(
+			dlFileEntry.getCompanyId(), dlFileEntry.getName(),
+			dlFileEntry.getDataRepositoryId());
 
 		return dlFileEntry;
 	}
@@ -2857,6 +2850,15 @@ public class DLFileEntryLocalServiceImpl
 					companyId, repositoryId, name, storeFileName);
 				DLStoreUtil.deleteFile(
 					companyId, repositoryId, name, storeFileName + ".index");
+
+				return null;
+			});
+	}
+
+	private void _deleteFile(long companyId, String name, long repositoryId) {
+		TransactionCallbackUtil.registerCommitCallback(
+			() -> {
+				DLStoreUtil.deleteFile(companyId, repositoryId, name);
 
 				return null;
 			});
