@@ -1141,6 +1141,30 @@ public class DLFileEntryLocalServiceTest {
 	}
 
 	@Test
+	public void testDeleteFileEntryWithRollback() throws Exception {
+		FileEntry fileEntry = DLAppTestUtil.addFileEntry(_group.getGroupId());
+
+		byte[] bytes = FileUtil.getBytes(fileEntry.getContentStream());
+
+		Assert.assertThrows(
+			PortalException.class,
+			() -> TransactionInvokerUtil.invoke(
+				_transactionConfig,
+				() -> {
+					DLFileEntryLocalServiceUtil.deleteFileEntry(
+						fileEntry.getFileEntryId());
+
+					throw new PortalException();
+				}));
+
+		FileEntry rolledBackFileEntry = DLAppLocalServiceUtil.getFileEntry(
+			fileEntry.getFileEntryId());
+
+		Assert.assertArrayEquals(
+			bytes, FileUtil.getBytes(rolledBackFileEntry.getContentStream()));
+	}
+
+	@Test
 	public void testDeleteFileVersionThatIsExpired() throws Exception {
 		ServiceContext serviceContext =
 			ServiceContextTestUtil.getServiceContext(
