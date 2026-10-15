@@ -363,6 +363,10 @@ public class DLFileEntryLocalServiceImpl
 			DLStoreUtil.addFile(dlStoreRequest, inputStream);
 		}
 
+		_deleteFileOnRollback(
+			user.getCompanyId(), dlFileEntry.getDataRepositoryId(), name,
+			dlFileVersion.getStoreFileName());
+
 		return dlFileEntry;
 	}
 
@@ -541,6 +545,10 @@ public class DLFileEntryLocalServiceImpl
 				dlFileEntry.getCompanyId(), dlFileEntry.getDataRepositoryId(),
 				dlFileEntry.getName(), oldVersion);
 		}
+
+		_deleteFileOnRollback(
+			dlFileEntry.getCompanyId(), dlFileEntry.getDataRepositoryId(),
+			dlFileEntry.getName(), latestDLFileVersion.getStoreFileName());
 
 		unlockFileEntry(fileEntryId);
 	}
@@ -2829,6 +2837,15 @@ public class DLFileEntryLocalServiceImpl
 				dlFileEntry.getName(), fromDLFileVersion.getVersion(),
 				toDLFileVersion.getStoreFileName());
 		}
+
+		if (!Objects.equals(
+				fromDLFileVersion.getStoreFileName(),
+				toDLFileVersion.getStoreFileName())) {
+
+			_deleteFileOnRollback(
+				dlFileEntry.getCompanyId(), dlFileEntry.getDataRepositoryId(),
+				dlFileEntry.getName(), toDLFileVersion.getStoreFileName());
+		}
 	}
 
 	private void _deleteFile(
@@ -2840,6 +2857,18 @@ public class DLFileEntryLocalServiceImpl
 					companyId, repositoryId, name, storeFileName);
 				DLStoreUtil.deleteFile(
 					companyId, repositoryId, name, storeFileName + ".index");
+
+				return null;
+			});
+	}
+
+	private void _deleteFileOnRollback(
+		long companyId, long repositoryId, String name, String storeFileName) {
+
+		TransactionCallbackUtil.registerRollbackCallback(
+			() -> {
+				DLStoreUtil.deleteFile(
+					companyId, repositoryId, name, storeFileName);
 
 				return null;
 			});
@@ -3942,6 +3971,11 @@ public class DLFileEntryLocalServiceImpl
 				else {
 					DLStoreUtil.updateFile(dlStoreRequest, inputStream);
 				}
+
+				_deleteFileOnRollback(
+					user.getCompanyId(), dlFileEntry.getDataRepositoryId(),
+					dlFileEntry.getName(),
+					updatedFileVersion.getStoreFileName());
 			}
 
 			if (autoCheckIn) {
