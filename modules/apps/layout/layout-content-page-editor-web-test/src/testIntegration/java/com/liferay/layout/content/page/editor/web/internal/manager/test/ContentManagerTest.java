@@ -11,12 +11,18 @@ import com.liferay.asset.list.model.AssetListEntry;
 import com.liferay.asset.list.service.AssetListEntryLocalService;
 import com.liferay.document.library.kernel.model.DLFolderConstants;
 import com.liferay.document.library.kernel.service.DLAppLocalService;
+import com.liferay.fragment.entry.processor.constants.FragmentEntryProcessorConstants;
+import com.liferay.fragment.model.FragmentEntryLink;
+import com.liferay.fragment.service.FragmentEntryLinkLocalService;
 import com.liferay.info.list.provider.item.selector.criterion.InfoListProviderItemSelectorReturnType;
+import com.liferay.layout.display.page.LayoutDisplayPageObjectProvider;
 import com.liferay.layout.manager.ContentManager;
 import com.liferay.layout.provider.LayoutStructureProvider;
 import com.liferay.layout.service.LayoutClassedModelUsageLocalService;
 import com.liferay.layout.test.util.ContentLayoutTestUtil;
 import com.liferay.layout.test.util.LayoutTestUtil;
+import com.liferay.petra.function.transform.TransformUtil;
+import com.liferay.petra.lang.SafeCloseable;
 import com.liferay.petra.string.StringPool;
 import com.liferay.portal.kernel.json.JSONArray;
 import com.liferay.portal.kernel.json.JSONObject;
@@ -29,6 +35,7 @@ import com.liferay.portal.kernel.repository.model.FileEntry;
 import com.liferay.portal.kernel.security.permission.PermissionCheckerFactoryUtil;
 import com.liferay.portal.kernel.service.CompanyLocalService;
 import com.liferay.portal.kernel.service.ServiceContext;
+import com.liferay.portal.kernel.service.ServiceContextThreadLocal;
 import com.liferay.portal.kernel.test.ReflectionTestUtil;
 import com.liferay.portal.kernel.test.TestInfo;
 import com.liferay.portal.kernel.test.portlet.MockLiferayResourceResponse;
@@ -41,7 +48,9 @@ import com.liferay.portal.kernel.test.util.TestPropsValues;
 import com.liferay.portal.kernel.test.util.UserTestUtil;
 import com.liferay.portal.kernel.theme.ThemeDisplay;
 import com.liferay.portal.kernel.util.ContentTypes;
+import com.liferay.portal.kernel.util.GroupThreadLocal;
 import com.liferay.portal.kernel.util.JavaConstants;
+import com.liferay.portal.kernel.util.LocaleUtil;
 import com.liferay.portal.kernel.util.Portal;
 import com.liferay.portal.kernel.util.WebKeys;
 import com.liferay.portal.test.rule.Inject;
@@ -51,6 +60,9 @@ import com.liferay.segments.service.SegmentsExperienceLocalService;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+
+import java.util.List;
+import java.util.Set;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -80,6 +92,62 @@ public class ContentManagerTest {
 		_group = GroupTestUtil.addGroup();
 
 		_layout = LayoutTestUtil.addTypeContentLayout(_group);
+	}
+
+	@Test
+	@TestInfo("LPD-117785")
+	public void testGetFragmentEntryLinkMappedLayoutDisplayPageObjectProviders()
+		throws Exception {
+
+		FileEntry fileEntry = _dlAppLocalService.addFileEntry(
+			RandomTestUtil.randomString(), TestPropsValues.getUserId(),
+			_group.getGroupId(), DLFolderConstants.DEFAULT_PARENT_FOLDER_ID,
+			RandomTestUtil.randomString(), ContentTypes.TEXT_PLAIN,
+			RandomTestUtil.randomString(), StringPool.BLANK, StringPool.BLANK,
+			StringPool.BLANK, "liferay".getBytes(), null, null, null,
+			ServiceContextTestUtil.getServiceContext(_group.getGroupId()));
+
+		FragmentEntryLink fragmentEntryLink =
+			_fragmentEntryLinkLocalService.createFragmentEntryLink(0);
+
+		fragmentEntryLink.setGroupId(_group.getGroupId());
+		fragmentEntryLink.setEditableValues(
+			JSONUtil.put(
+				FragmentEntryProcessorConstants.
+					KEY_EDITABLE_FRAGMENT_ENTRY_PROCESSOR,
+				JSONUtil.put(
+					RandomTestUtil.randomString(),
+					JSONUtil.put(
+						LocaleUtil.toLanguageId(LocaleUtil.US),
+						JSONUtil.put(
+							"classNameId",
+							_portal.getClassNameId(FileEntry.class.getName())
+						).put(
+							"externalReferenceCode",
+							fileEntry.getExternalReferenceCode()
+						)))
+			).toString());
+
+		ServiceContextThreadLocal.pushServiceContext(new ServiceContext());
+
+		try (SafeCloseable safeCloseable =
+				GroupThreadLocal.setGroupIdWithSafeCloseable(0)) {
+
+			Set<LayoutDisplayPageObjectProvider<?>>
+				layoutDisplayPageObjectProviders =
+					_contentManager.
+						getFragmentEntryLinkMappedLayoutDisplayPageObjectProviders(
+							fragmentEntryLink);
+
+			Assert.assertEquals(
+				List.of(fileEntry.getFileEntryId()),
+				TransformUtil.transform(
+					layoutDisplayPageObjectProviders,
+					LayoutDisplayPageObjectProvider::getClassPK));
+		}
+		finally {
+			ServiceContextThreadLocal.popServiceContext();
+		}
 	}
 
 	@Test
@@ -217,6 +285,9 @@ public class ContentManagerTest {
 
 	@Inject
 	private DLAppLocalService _dlAppLocalService;
+
+	@Inject
+	private FragmentEntryLinkLocalService _fragmentEntryLinkLocalService;
 
 	@DeleteAfterTestRun
 	private Group _group;
