@@ -164,14 +164,7 @@ public class ContentManagerImpl implements ContentManager {
 	public Set<LayoutDisplayPageObjectProvider<?>>
 		getLayoutMappedLayoutDisplayPageObjectProviders(String layoutData) {
 
-		Set<LayoutDisplayPageObjectProvider<?>>
-			layoutDisplayPageObjectProviders = new HashSet<>();
-
-		_getLayoutMappedLayoutDisplayPageObjectProviders(
-			0, LayoutStructure.of(layoutData), layoutDisplayPageObjectProviders,
-			new HashSet<>());
-
-		return layoutDisplayPageObjectProviders;
+		return _getLayoutMappedLayoutDisplayPageObjectProviders(0, layoutData);
 	}
 
 	public Set<LayoutDisplayPageObjectProvider<?>>
@@ -441,7 +434,8 @@ public class ContentManagerImpl implements ContentManager {
 
 		Set<LayoutDisplayPageObjectProvider<?>>
 			layoutDisplayPageObjectProviders =
-				getLayoutMappedLayoutDisplayPageObjectProviders(
+				_getLayoutMappedLayoutDisplayPageObjectProviders(
+					layoutPageTemplateStructure.getGroupId(),
 					layoutPageTemplateStructureRel.getData());
 
 		for (LayoutDisplayPageObjectProvider<?>
@@ -1358,6 +1352,20 @@ public class ContentManagerImpl implements ContentManager {
 				groupId, linkJSONObject, layoutDisplayPageObjectProviders,
 				uniqueLayoutClassedModelUsageKeys);
 		}
+	}
+
+	private Set<LayoutDisplayPageObjectProvider<?>>
+		_getLayoutMappedLayoutDisplayPageObjectProviders(
+			long groupId, String layoutData) {
+
+		Set<LayoutDisplayPageObjectProvider<?>>
+			layoutDisplayPageObjectProviders = new HashSet<>();
+
+		_getLayoutMappedLayoutDisplayPageObjectProviders(
+			groupId, LayoutStructure.of(layoutData),
+			layoutDisplayPageObjectProviders, new HashSet<>());
+
+		return layoutDisplayPageObjectProviders;
 	}
 
 	private void _getLocalizedLayoutDisplayPageObjectProviders(
