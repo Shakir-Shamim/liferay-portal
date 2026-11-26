@@ -17,10 +17,17 @@ import com.liferay.fragment.service.FragmentEntryLinkLocalService;
 import com.liferay.info.list.provider.item.selector.criterion.InfoListProviderItemSelectorReturnType;
 import com.liferay.layout.display.page.LayoutDisplayPageObjectProvider;
 import com.liferay.layout.manager.ContentManager;
+import com.liferay.layout.model.LayoutClassedModelUsage;
+import com.liferay.layout.page.template.model.LayoutPageTemplateStructure;
+import com.liferay.layout.page.template.model.LayoutPageTemplateStructureRel;
+import com.liferay.layout.page.template.service.LayoutPageTemplateStructureLocalService;
+import com.liferay.layout.page.template.service.LayoutPageTemplateStructureRelLocalService;
 import com.liferay.layout.provider.LayoutStructureProvider;
 import com.liferay.layout.service.LayoutClassedModelUsageLocalService;
 import com.liferay.layout.test.util.ContentLayoutTestUtil;
 import com.liferay.layout.test.util.LayoutTestUtil;
+import com.liferay.layout.util.structure.LayoutStructure;
+import com.liferay.layout.util.structure.LayoutStructureItem;
 import com.liferay.petra.function.transform.TransformUtil;
 import com.liferay.petra.lang.SafeCloseable;
 import com.liferay.petra.string.StringPool;
@@ -99,13 +106,7 @@ public class ContentManagerTest {
 	public void testGetFragmentEntryLinkMappedLayoutDisplayPageObjectProviders()
 		throws Exception {
 
-		FileEntry fileEntry = _dlAppLocalService.addFileEntry(
-			RandomTestUtil.randomString(), TestPropsValues.getUserId(),
-			_group.getGroupId(), DLFolderConstants.DEFAULT_PARENT_FOLDER_ID,
-			RandomTestUtil.randomString(), ContentTypes.TEXT_PLAIN,
-			RandomTestUtil.randomString(), StringPool.BLANK, StringPool.BLANK,
-			StringPool.BLANK, "liferay".getBytes(), null, null, null,
-			ServiceContextTestUtil.getServiceContext(_group.getGroupId()));
+		FileEntry fileEntry = _addFileEntry(RandomTestUtil.randomString());
 
 		FragmentEntryLink fragmentEntryLink =
 			_fragmentEntryLinkLocalService.createFragmentEntryLink(0);
@@ -155,14 +156,7 @@ public class ContentManagerTest {
 	public void testGetPageContentsJSONArrayWithMultipleUsages()
 		throws Exception {
 
-		FileEntry fileEntry = _dlAppLocalService.addFileEntry(
-			null, TestPropsValues.getUserId(), _group.getGroupId(),
-			DLFolderConstants.DEFAULT_PARENT_FOLDER_ID,
-			RandomTestUtil.randomString(), ContentTypes.TEXT_PLAIN,
-			RandomTestUtil.randomString(), StringPool.BLANK, StringPool.BLANK,
-			StringPool.BLANK, "liferay".getBytes(), null, null, null,
-			ServiceContextTestUtil.getServiceContext(
-				TestPropsValues.getGroupId()));
+		FileEntry fileEntry = _addFileEntry(null);
 
 		_layoutClassedModelUsageLocalService.addLayoutClassedModelUsage(
 			_group.getGroupId(), StringPool.BLANK,
@@ -274,6 +268,80 @@ public class ContentManagerTest {
 		Assert.assertFalse(actionsJSONObject.has("editURL"));
 	}
 
+	@Test
+	@TestInfo("LPD-117785")
+	public void testUpdateLayoutClassedModelUsage() throws Exception {
+		FileEntry fileEntry = _addFileEntry(RandomTestUtil.randomString());
+
+		LayoutPageTemplateStructure layoutPageTemplateStructure =
+			_layoutPageTemplateStructureLocalService.
+				fetchLayoutPageTemplateStructure(
+					_group.getGroupId(), _layout.getPlid());
+
+		LayoutPageTemplateStructureRel layoutPageTemplateStructureRel =
+			_layoutPageTemplateStructureRelLocalService.
+				fetchLayoutPageTemplateStructureRel(
+					layoutPageTemplateStructure.
+						getLayoutPageTemplateStructureId(),
+					_segmentsExperienceLocalService.
+						fetchDefaultSegmentsExperienceId(_layout.getPlid()));
+
+		LayoutStructure layoutStructure = LayoutStructure.of(
+			layoutPageTemplateStructureRel.getData());
+
+		LayoutStructureItem layoutStructureItem =
+			layoutStructure.addContainerStyledLayoutStructureItem(
+				layoutStructure.getMainItemId(), 0);
+
+		layoutStructureItem.updateItemConfig(
+			JSONUtil.put(
+				"styles",
+				JSONUtil.put(
+					"backgroundImage",
+					JSONUtil.put(
+						"classNameId",
+						_portal.getClassNameId(FileEntry.class.getName())
+					).put(
+						"externalReferenceCode",
+						fileEntry.getExternalReferenceCode()
+					))));
+
+		layoutPageTemplateStructureRel.setData(layoutStructure.toString());
+
+		ServiceContextThreadLocal.pushServiceContext(new ServiceContext());
+
+		try (SafeCloseable safeCloseable =
+				GroupThreadLocal.setGroupIdWithSafeCloseable(0)) {
+
+			_contentManager.updateLayoutClassedModelUsage(
+				layoutPageTemplateStructureRel);
+		}
+		finally {
+			ServiceContextThreadLocal.popServiceContext();
+		}
+
+		List<LayoutClassedModelUsage> layoutClassedModelUsages =
+			_layoutClassedModelUsageLocalService.getLayoutClassedModelUsages(
+				_portal.getClassNameId(FileEntry.class.getName()),
+				fileEntry.getFileEntryId());
+
+		Assert.assertEquals(
+			layoutClassedModelUsages.toString(), 1,
+			layoutClassedModelUsages.size());
+	}
+
+	private FileEntry _addFileEntry(String externalReferenceCode)
+		throws Exception {
+
+		return _dlAppLocalService.addFileEntry(
+			externalReferenceCode, TestPropsValues.getUserId(),
+			_group.getGroupId(), DLFolderConstants.DEFAULT_PARENT_FOLDER_ID,
+			RandomTestUtil.randomString(), ContentTypes.TEXT_PLAIN,
+			RandomTestUtil.randomString(), StringPool.BLANK, StringPool.BLANK,
+			StringPool.BLANK, "liferay".getBytes(), null, null, null,
+			ServiceContextTestUtil.getServiceContext(_group.getGroupId()));
+	}
+
 	@Inject
 	private AssetListEntryLocalService _assetListEntryLocalService;
 
@@ -297,6 +365,14 @@ public class ContentManagerTest {
 	@Inject
 	private LayoutClassedModelUsageLocalService
 		_layoutClassedModelUsageLocalService;
+
+	@Inject
+	private LayoutPageTemplateStructureLocalService
+		_layoutPageTemplateStructureLocalService;
+
+	@Inject
+	private LayoutPageTemplateStructureRelLocalService
+		_layoutPageTemplateStructureRelLocalService;
 
 	@Inject
 	private LayoutStructureProvider _layoutStructureProvider;
